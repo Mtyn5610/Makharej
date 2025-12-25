@@ -1,31 +1,31 @@
 #!/bin/bash
 
-# ۱. نصب ابزارهای مورد نیاز سیستم
-echo "🔄 در حال نصب پیش‌نیازها (Git و Pip)..."
-sudo apt update && sudo apt install -y git python3-pip screen
+# ۱. پاکسازی نسخه قبلی و دریافت فایل‌های جدید
+echo "🧹 در حال آماده‌سازی و دریافت فایل‌ها..."
+rm -rf Makharej
+git clone https://github.com/Mtyn5610/Makharej.git
+cd Makharej
 
-# ۲. دریافت توکن ربات از کاربر
+# ۲. نصب پیش‌نیازهای سیستم
+echo "🔄 در حال نصب پیش‌نیازها..."
+sudo apt update && sudo apt install -y python3-pip screen
+
+# ۳. دریافت توکن
 echo "------------------------------------------"
-read -p "🔑 لطفاً توکن ربات تلگرام خود را وارد کنید: " user_token
+read -p "🔑 توکن ربات تلگرام را وارد کنید: " user_token
 echo "------------------------------------------"
 
-# ۳. نصب کتابخانه‌های پایتون از روی فایل requirements.txt
+# ۴. نصب کتابخانه‌ها
 echo "📦 در حال نصب کتابخانه‌های پایتون..."
 pip install -r requirements.txt
 
-# ۴. جایگزینی توکن در فایل bot.py با استفاده از جداکننده | برای امنیت بیشتر
-echo "⚙️ در حال پیکربندی نهایی ربات..."
+# ۵. جایگذاری توکن در کد
 sed -i "s|ENTER_TOKEN_HERE|$user_token|g" bot.py
 
-# ۵. پرسش برای نحوه اجرا
-echo "✅ نصب با موفقیت انجام شد!"
-echo "❓ می‌خواهید ربات همین الان در حالت پایدار (Screen) اجرا شود؟"
-read -p "برای بله عدد 1 و برای خیر عدد 2 را بزنید: " run_choice
+# ۶. اجرا در حالت Screen
+echo "🚀 در حال اجرای ربات در پس‌زمینه..."
+screen -dmS my_bot python3 bot.py
 
-if [ "$run_choice" == "1" ]; then
-    screen -dmS my_bot python3 bot.py
-    echo "🚀 ربات در پس‌زمینه روشن شد."
-    echo "💡 برای مشاهده وضعیت ربات دستور مقابل را بزنید: screen -r my_bot"
-else
-    echo "🆗 بسیار خب. می‌توانید هر زمان خواستید با دستور python3 bot.py ربات را اجرا کنید."
-fi
+echo "✅ نصب با موفقیت به پایان رسید!"
+echo "💡 برای دیدن لاگ‌ها: screen -r my_bot"
+echo "💡 برای توقف کامل ربات: screen -S my_bot -X quit"
