@@ -1,3 +1,6 @@
 python-telegram-bot
 pandas
 openpyxl
+numpy==1.26.4
+openai-whisper
+setuptools
