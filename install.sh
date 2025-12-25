@@ -1,31 +1,42 @@
 #!/bin/bash
 
-# ۱. پاکسازی نسخه قبلی و دریافت فایل‌های جدید
-echo "🧹 در حال آماده‌سازی و دریافت فایل‌ها..."
+# ۱. پاکسازی کامل
+echo "🧹 Cleaning up..."
 rm -rf Makharej
+screen -XS my_bot quit 2>/dev/null
+
+# ۲. دانلود پروژه
+echo "📥 Downloading project..."
 git clone https://github.com/Mtyn5610/Makharej.git
-cd Makharej
+cd Makharej || exit
 
-# ۲. نصب پیش‌نیازهای سیستم
-echo "🔄 در حال نصب پیش‌نیازها..."
-sudo apt update && sudo apt install -y python3-pip screen
+# ۳. نصب پیش‌نیازهای ضروری لینوکس
+echo "🔄 Installing system requirements..."
+sudo apt update
+sudo apt install -y python3-pip python3-venv screen
 
-# ۳. دریافت توکن
+# ۴. ساخت محیط مجازی (با بررسی خطا)
+echo "📦 Creating Virtual Environment..."
+python3 -m venv venv
+if [ ! -d "venv" ]; then
+    echo "❌ Error: Failed to create venv. Installing venv package again..."
+    sudo apt install -y python3.12-venv # یا نسخه پایتون خودتان
+    python3 -m venv venv
+fi
+
+# ۵. نصب کتابخانه‌ها
+echo "🐍 Installing Python libraries..."
+./venv/bin/pip install --upgrade pip
+./venv/bin/pip install -r requirements.txt
+
+# ۶. تنظیم توکن
 echo "------------------------------------------"
-read -p "🔑 توکن ربات تلگرام را وارد کنید: " user_token
-echo "------------------------------------------"
-
-# ۴. نصب کتابخانه‌ها
-echo "📦 در حال نصب کتابخانه‌های پایتون..."
-pip install -r requirements.txt
-
-# ۵. جایگذاری توکن در کد
+read -p "🔑 Telegram Bot Token: " user_token
 sed -i "s|ENTER_TOKEN_HERE|$user_token|g" bot.py
+echo "------------------------------------------"
 
-# ۶. اجرا در حالت Screen
-echo "🚀 در حال اجرای ربات در پس‌زمینه..."
-screen -dmS my_bot python3 bot.py
+# ۷. اجرا
+echo "🚀 Starting Bot..."
+screen -dmS my_bot ./venv/bin/python3 bot.py
 
-echo "✅ نصب با موفقیت به پایان رسید!"
-echo "💡 برای دیدن لاگ‌ها: screen -r my_bot"
-echo "💡 برای توقف کامل ربات: screen -S my_bot -X quit"
+echo "✅ Done! Use 'screen -r my_bot' to see logs."
