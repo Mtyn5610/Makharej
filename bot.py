@@ -1,40 +1,67 @@
-import os
-import sqlite3
-import pandas as pd
-import logging
-import re
+import os, sqlite3, pandas as pd, re, whisper
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# تنظیمات لاگ برای مشاهده فعالیت ربات
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
-
-# این عبارت توسط اسکریپت نصب (install.sh) با توکن واقعی جایگزین می‌شود
 TOKEN = "ENTER_TOKEN_HERE"
+# بارگذاری مدل هوش مصنوعی (ممکن است چند لحظه طول بکشد)
+model = whisper.load_model("base")
 
-# --- مدیریت دیتابیس اختصاصی برای هر کاربر ---
 def get_db(user_id):
-    db_name = f"user_{user_id}.db"
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS transactions 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                      amount INTEGER, description TEXT, category TEXT)''')
-    conn.commit()
+    conn = sqlite3.connect(f"user_{user_id}.db")
+    conn.execute('''CREATE TABLE IF NOT EXISTS tx (id INTEGER PRIMARY KEY AUTOINCREMENT, amount INTEGER, desc TEXT, type TEXT)''')
     return conn
 
-# --- دستورات اصلی ربات ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [["📊 گزارش", "📥 دریافت اکسل"], ["❓ راهنما"]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        f"سلام {update.effective_user.first_name}! 💰\nخوش آمدی. مبلغ و بابت هزینه‌ات را بفرست (مثلاً: ۵۰ تومن بنزین)",
-        reply_markup=reply_markup
-    )
+    kb = [["📊 گزارش کلی", "📥 دریافت فایل اکسل"]]
+    await update.message.reply_text("سلام! مبلغ را بنویس یا جزییات را بصورت ویس بگو (مثلاً: ۵۰ هزار تومان بابت حقوق)", 
+                                  reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True))
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+async def process_data(user_id, text):
+    nums = re.findall(r'\d+', text.replace(',', ''))
+    if not nums: return "❌ مبلغی در پیام شما پیدا نشد."
+    
+    amount = int(nums[0])
+    tx_type = "درآمد ➕" if any(w in text for w in ["حقوق", "درآمد", "واریز", "فروش"]) else "هزینه ➖"
+    val = amount if tx_type == "درآمد ➕" else -amount
+
+    conn = get_db(user_id)
+    conn.execute("INSERT INTO tx (amount, desc, type) VALUES (?, ?, ?)", (val, text, tx_type))
+    conn.commit()
+    return f"✅ ثبت شد: {amount:,} تومان ({tx_type})\n📝 متن: {text}"
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    response = await process_data(update.effective_user.id, update.message.text)
+    await update.message.reply_text(response)
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sent_msg = await update.message.reply_text("⏳ در حال گوش دادن به ویس شما...")
+    file = await context.bot.get_file(update.message.voice.file_id)
+    await file.download_to_drive("voice.ogg")
+    
+    # تبدیل صوت به متن
+    result = model.transcribe("voice.ogg", language="fa")
+    text = result["text"]
+    
+    response = await process_data(update.effective_user.id, text)
+    await sent_msg.edit_text(response)
+    if os.path.exists("voice.ogg"): os.remove("voice.ogg")
+
+async def send_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    conn = get_db(user_id)
+    df = pd.read_sql_query("SELECT amount FROM tx", conn)
+    total = df['amount'].sum() if not df.empty else 0
+    await update.message.reply_text(f"💰 موجودی فعلی: {total:,} تومان")
+
+def main():
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.Text("📊 گزارش کلی"), send_report))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    app.run_polling()
+
+if __name__ == '__main__': main()    user_id = update.effective_user.id
     
     # استخراج اولین عدد از متن به عنوان مبلغ
     numbers = re.findall(r'\d+', text)
