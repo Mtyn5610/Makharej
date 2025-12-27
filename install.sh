@@ -1,32 +1,31 @@
 #!/bin/bash
-# ۱. دریافت توکن در همان ثانیه اول
-clear
-echo "------------------------------------------"
-read -p "🔑 Telegram Bot Token را وارد کنید: " user_token
-echo "------------------------------------------"
+# ۱. پاکسازی پوشه‌های قدیمی
+rm -rf Makharej
+screen -XS my_bot quit 2>/dev/null
 
-# ۲. نصب پیش‌نیازهای سیستم
-echo "🔄 در حال نصب پیش‌نیازهای لینوکس..."
+# ۲. دریافت توکن
+clear
+echo "=========================================="
+read -p "🔑 Telegram Bot Token: " user_token
+echo "=========================================="
+
+# ۳. نصب ملزومات سیستمی
 sudo apt update && sudo apt install -y python3-pip python3-venv screen ffmpeg git
 
-# ۳. دانلود پروژه
-echo "📥 در حال دانلود پروژه از گیت‌هاب..."
+# ۴. دانلود پروژه
 git clone https://github.com/Mtyn5610/Makharej.git
 cd Makharej
 
-# ۴. ساخت محیط مجازی و نصب کتابخانه‌ها
-echo "📦 در حال ساخت محیط مجازی و نصب پکیج‌ها (کمی زمان‌بر)..."
+# ۵. ساخت محیط مجازی و نصب پکیج‌ها
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
-./venv/bin/pip install python-telegram-bot pandas openpyxl numpy==1.26.4 openai-whisper
+./venv/bin/pip install -r requirements.txt
 
-# ۵. جایگذاری هوشمند توکن
-echo "⚙️ در حال تنظیم توکن در فایل bot.py..."
+# ۶. تنظیم توکن
 sed -i "s/TOKEN = \"ENTER_TOKEN_HERE\"/TOKEN = \"$user_token\"/" bot.py
 
-# ۶. اجرای نهایی در پس‌زمینه
-echo "🚀 ربات در حال اجراست..."
+# ۷. اجرا در پس‌زمینه
 screen -dmS my_bot ./venv/bin/python3 bot.py
 
-echo "✅ تمام! حالا می‌توانید به ربات در تلگرام پیام بدهید."
-echo "💡 نکته: پردازش اولین ویس ممکن است ۱ دقیقه طول بکشد (به دلیل دانلود مدل هوش مصنوعی)."
+echo "✅ نصب کامل شد! ربات در حال اجراست."
+echo "💡 برای مشاهده وضعیت زنده: screen -r my_bot"
