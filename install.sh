@@ -1,5 +1,4 @@
-#!/bin/bash
-
+#!/usr/bin/env python3
 # مسیر مخزن شما
 REPO_URL="https://raw.githubusercontent.com/Mtyn5610/Makharej/main"
 
