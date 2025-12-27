@@ -11,22 +11,26 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # --- تنظیمات اصلی ---
 TOKEN = "ENTER_TOKEN_HERE"
 
-# کلمات کلیدی برای تشخیص درآمد
-INCOME_KEYWORDS = ["فروختم","حقوق", "درآمد", "واریز", "فروش", "سود", "هدیه", "طلب", "برگشتی", "پاداش", "یارانه", "دریافت", "گرفتم", "اومد"]
+# کلمات کلیدی درآمد (گسترش یافته برای تشخیص دقیق‌تر)
+INCOME_KEYWORDS = [
+    "حقوق", "درآمد", "واریز", "فروش", "فروختم", "سود", "هدیه", "طلب", "برگشتی", 
+    "پاداش", "یارانه", "دریافت", "گرفتم", "اومد", "نشست", "کاسبی", "دستمزد"
+]
 
-# دسته‌بندی هوشمند
+# دسته‌بندی هوشمند (گسترش یافته)
 CATEGORIES = {
-    "🍎 تغذیه": ["غذا", "رستوران", "سوپرمارکت", "نون", "میوه", "ناهار", "شام", "کافه", "سیگار", "شیرینی", "گوشت", "مرغ"],
-    "💰 سرمایه‌گذاری": ["طلا", "دلار", "ارز", "سکه", "بورس", "سهام"],
-    "🚗 حمل و نقل": ["بنزین", "اسنپ", "تپسی", "ماشین", "تعمیرگاه", "کارواش", "مترو", "اتوبوس", "پارکینگ"],
-    "🏠 خانه": ["اجاره", "شارژ", "قبض", "آب", "برق", "گاز", "اینترنت", "تلفن"],
-    "💊 سلامت": ["دکتر", "دارو", "ویزیت", "داروخانه", "فیزیوتراپی"],
-    "💳 مالی و قسط": ["قسط", "وام", "کارت به کارت", "قرض", "بدهی", "چک"],
-    "👕 پوشاک": ["لباس", "کفش", "شلوار", "پیراهن", "آرایشگاه"],
-    "🎮 تفریح": ["سینما", "بازی", "سفر", "هتل", "بلیط", "کادو", "تولد"]
+    "🍎 تغذیه": ["غذا", "رستوران", "سوپرمارکت", "نون", "میوه", "ناهار", "شام", "کافه", "سیگار", "شیرینی", "گوشت", "مرغ", "هایپر", "لبنیات"],
+    "💰 سرمایه‌گذاری": ["طلا", "دلار", "ارز", "سکه", "بورس", "سهام", "کریپتو", "تتر", "بیت کوین"],
+    "🚗 حمل و نقل": ["بنزین", "اسنپ", "تپسی", "ماشین", "تعمیرگاه", "کارواش", "مترو", "اتوبوس", "پارکینگ", "لاستیک", "روغن"],
+    "🏠 خانه": ["اجاره", "شارژ", "قبض", "آب", "برق", "گاز", "اینترنت", "تلفن", "وسایل خونه", "تعمیرات"],
+    "💊 سلامت": ["دکتر", "دارو", "ویزیت", "داروخانه", "فیزیوتراپی", "بیمارستان", "آزمایشگاه", "دندون"],
+    "💳 مالی و قسط": ["قسط", "وام", "کارت به کارت", "قرض", "بدهی", "چک", "بیمه", "مالیات"],
+    "👕 پوشاک و آرایش": ["لباس", "کفش", "شلوار", "پیراهن", "آرایشگاه", "سلمانی", "پیرایش", "ادکلن"],
+    "🎮 تفریح و هدیه": ["سینما", "بازی", "سفر", "هتل", "بلیط", "کادو", "تولد", "مهمونی", "کنسرت"],
+    "📱 تکنولوژی": ["موبایل", "گوشی", "شارژر", "لپ‌تاپ", "هدفون", "نرم‌افزار", "آنتی ویروس"]
 }
 
-# مدیریت دیتابیس
+# --- مدیریت دیتابیس ---
 def get_db(user_id):
     db_path = f"user_{user_id}.db"
     conn = sqlite3.connect(db_path)
@@ -51,6 +55,7 @@ async def process_data(user_id, text):
     if not amount:
         return f"❓ مبلغی در این متن پیدا نشد:\n«{text}»"
     
+    # تشخیص هوشمند نوع تراکنش
     is_income = any(w in text for w in INCOME_KEYWORDS)
     tx_type = "درآمد ➕" if is_income else "هزینه ➖"
     category = detect_category(text)
@@ -72,7 +77,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ["🗑 حذف آخرین ثبت", "⚠️ پاکسازی کل"]
     ]
     await update.message.reply_text(
-        "🌟 به **جیبی‌نو** خوش آمدید!\n\nکافیست مخارج یا درآمدهای خود را به صورت متن یا ویس بفرستید.\nمثلاً: «۲۰۰ هزار تومن پول طلا خریدم»",
+        "🌟 به **جیبی‌نو** خوش آمدید!\n\nمن با کلمات جدید آپدیت شدم! کافیه مخارج یا درآمدت رو بگی.\nمثلاً: «گوشیم رو ۵ میلیون فروختم» یا «۲۰ تومن پول شارژر دادم»",
         reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True),
         parse_mode="Markdown"
     )
@@ -90,7 +95,7 @@ async def get_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     report += f"💵 **مانده کل:** {total:,} تومان\n\n"
     
     if not df_cat.empty:
-        report += "🔻 **هزینه‌ها به تفکیک دسته‌بندی:**\n"
+        report += "🔻 **بیشترین هزینه‌ها به تفکیک:**\n"
         for _, row in df_cat.iterrows():
             report += f"{row['category']}: {abs(row['cat_sum']):,} تومان\n"
     
@@ -145,7 +150,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = r.recognize_google(r.record(source), language="fa-IR")
         res = await process_data(update.effective_user.id, text)
         await m.edit_text(res)
-    except Exception as e:
+    except Exception:
         await m.edit_text("❌ متوجه صدا نشدم.")
     finally:
         for f in [ogg, wav]: 
@@ -164,7 +169,7 @@ def main():
     app.add_handler(MessageHandler(filters.Text("⚠️ پاکسازی کل"), clear_all))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    print("JibiNo is online...")
+    print("JibiNo is online with extended vocabulary...")
     app.run_polling()
 
 if __name__ == '__main__':
