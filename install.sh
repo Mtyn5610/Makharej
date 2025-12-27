@@ -1,57 +1,47 @@
 #!/bin/bash
 
-# آدرس مخزن گیت‌هاب شما
+# آدرس مخزن شما
 REPO_URL="https://raw.githubusercontent.com/Mtyn5610/Makharej/main"
 
 clear
-echo -e "\033[0;36m"
-echo "  ██╗██╗██████╗ ██╗███╗   ██╗ ██████╗ "
-echo "  ██║██║██╔══██╗██║████╗  ██║██╔═══██╗"
-echo "  ██║██║██████╔╝██║██╔██╗ ██║██║   ██║"
-echo "  ██║██║██╔══██╗██║██║╚██╗██║██║   ██║"
-echo "  ╚█████╔╝██████╔╝██║██║ ╚████║╚██████╔╝"
-echo "   ╚════╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝ "
-echo -e "\033[1;33m      >>> JibiNo Smart Installer <<< \033[0m"
-echo "-----------------------------------------------"
+echo "==============================================="
+echo "        JibiNo Installer - جیبی‌نو             "
+echo "==============================================="
 
 # ۱. دریافت توکن
-read -p "لطفاً توکن ربات تلگرام را وارد کنید: " bot_token
+read -p "Token: " bot_token
 if [ -z "$bot_token" ]; then
     echo "خطا: توکن وارد نشد."
     exit 1
 fi
 
-# ۲. ایجاد پوشه
+# ۲. ایجاد پوشه و دانلود فایل‌ها
 mkdir -p ~/Makharej && cd ~/Makharej
+curl -sLO "$REPO_URL/bot.py"
+curl -sLO "$REPO_URL/requirements.txt"
+curl -sLO "$REPO_URL/manager.sh"
 
-# ۳. دانلود فایل‌ها
-echo "📥 در حال دریافت فایل‌ها..."
-curl -sO "$REPO_URL/bot.py"
-curl -sO "$REPO_URL/requirements.txt"
-curl -sO "$REPO_URL/manager.sh"
+# ۳. نصب پیش‌نیازها
+sudo apt update -y
+sudo apt install -y python3-pip python3-venv ffmpeg screen zip
 
-# ۴. نصب پکیج‌ها
-echo "📦 در حال نصب پکیج‌های سیستم..."
-sudo apt update -y >> /dev/null
-sudo apt install -y python3-pip python3-venv ffmpeg screen zip >> /dev/null
-
-# ۵. محیط مجازی و نصب کتابخانه‌ها
+# ۴. راه‌اندازی پایتون
 python3 -m venv venv
-./venv/bin/pip install --upgrade pip >> /dev/null
-./venv/bin/pip install -r requirements.txt >> /dev/null
+./venv/bin/pip install --upgrade pip
+./venv/bin/pip install -r requirements.txt
 
-# ۶. تنظیم توکن
+# ۵. تزریق توکن به کد
 sed -i "s/ENTER_TOKEN_HERE/$bot_token/" bot.py
 
-# ۷. تنظیم Alias و دسترسی‌ها
+# ۶. تنظیم دسترسی و میانبر
 chmod +x manager.sh
 if ! grep -q "alias JibiNo=" ~/.bashrc; then
     echo "alias JibiNo='bash ~/Makharej/manager.sh'" >> ~/.bashrc
 fi
 
-clear
-echo -e "\033[0;32m✅ نصب کامل شد! برای اجرا بنویسید: JibiNo\033[0m"
+echo "✅ نصب با موفقیت تمام شد."
+echo "برای شروع بنویسید: JibiNo"
 sleep 2
 
-# ۸. اجرای نهایی
+# ۷. اجرای منو
 bash ~/Makharej/manager.sh
