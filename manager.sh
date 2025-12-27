@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# مسیر پوشه پروژه
+PROJECT_DIR="$HOME/Makharej"
+
 while true; do
     clear
     echo -e "\e[32m"
@@ -21,23 +25,52 @@ while true; do
     echo -e "\e[31m7) 🧨 پاکسازی کامل پروژه (Uninstall)\e[0m"
     echo "---------------------------------------"
     read -p "انتخاب کنید: " opt
+
     case $opt in
-        1) screen -dmS jibi_bot ~/Makharej/venv/bin/python3 ~/Makharej/bot.py && echo "✅ روشن شد." ;;
-        2) screen -XS jibi_bot quit && echo "🛑 خاموش شد." ;;
-        3) screen -XS jibi_bot quit && screen -dmS jibi_bot ~/Makharej/venv/bin/python3 ~/Makharej/bot.py && echo "🔄 ری‌استارت شد." ;;
-        4) screen -r jibi_bot ;;
-        5) zip -r backup_$(date +%Y%m%d).zip ~/Makharej/user_*.db && echo "✅ بکاپ گرفته شد." ;;
-        6) exit 0 ;;
-        7) 
-            read -p "⚠️ آیا مطمئن هستید که می‌خواهید کل پروژه و دیتابیس‌ها را پاک کنید؟ (y/n): " confirm
+        1)
+            # ابتدا تمام اسکرین‌های قدیمی با نام jibi_bot را می‌بندد
+            screen -ls | grep "jibi_bot" | cut -d. -f1 | awk '{print $1}' | xargs -r -n1 screen -XS quit
+            # حالا نسخه جدید را اجرا می‌کند
+            screen -dmS jibi_bot $PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/bot.py
+            echo -e "\e[32m✅ ربات با موفقیت در یک سشن تازه روشن شد.\e[0m"
+            ;;
+        2)
+            screen -ls | grep "jibi_bot" | cut -d. -f1 | awk '{print $1}' | xargs -r -n1 screen -XS quit
+            echo -e "\e[31m🛑 تمام سشن‌های ربات متوقف شدند.\e[0m"
+            ;;
+        3)
+            screen -ls | grep "jibi_bot" | cut -d. -f1 | awk '{print $1}' | xargs -r -n1 screen -XS quit
+            sleep 1
+            screen -dmS jibi_bot $PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/bot.py
+            echo -e "\e[36m🔄 ری‌استارت انجام شد.\e[0m"
+            ;;
+        4)
+            # چک می‌کند آیا اسکرینی باز هست یا نه
+            if screen -list | grep -q "jibi_bot"; then
+                screen -r jibi_bot
+            else
+                echo -e "\e[31m❌ هیچ رباتی در حال اجرا نیست.\e[0m"
+            fi
+            ;;
+        5)
+            zip -r $PROJECT_DIR/backup_$(date +%Y%m%d).zip $PROJECT_DIR/user_*.db
+            echo -e "\e[32m✅ فایل بکاپ در پوشه پروژه ساخته شد.\e[0m"
+            ;;
+        6)
+            exit 0
+            ;;
+        7)
+            read -p "⚠️ آیا مطمئن هستید که می‌خواهید کل پروژه را پاک کنید؟ (y/n): " confirm
             if [ "$confirm" == "y" ]; then
-                screen -XS jibi_bot quit 2>/dev/null
-                rm -rf ~/Makharej
+                screen -ls | grep "jibi_bot" | cut -d. -f1 | awk '{print $1}' | xargs -r -n1 screen -XS quit
+                rm -rf $PROJECT_DIR
                 sed -i '/alias JibiNo=/d' ~/.bashrc
-                echo -e "\e[31m🔥 پروژه و تنظیمات کاملاً پاک شدند.\e[0m"
-                echo "برای اعمال تغییرات نهایی، دستور 'source ~/.bashrc' را بزنید یا ترمینال را ببندید."
+                echo -e "\e[31m🔥 پروژه با موفقیت حذف شد.\e[0m"
                 exit 0
             fi
+            ;;
+        *)
+            echo "گزینه نامعتبر."
             ;;
     esac
     read -p "برگشت با اینتر..."
