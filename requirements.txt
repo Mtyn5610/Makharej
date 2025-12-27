@@ -3,3 +3,4 @@ pandas
 openpyxl
 SpeechRecognition
 pydub
+jdatetime
