@@ -1,40 +1,76 @@
 import os, sqlite3, pandas as pd, re, whisper
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from word2number_fa import persian_w2n
 
 TOKEN = "ENTER_TOKEN_HERE"
-# استفاده از مدل tiny برای سرعت و بهینه‌سازی رم سرور
 model = whisper.load_model("tiny")
 
-def get_db(user_id):
-    conn = sqlite3.connect(f"user_{user_id}.db")
-    conn.execute('''CREATE TABLE IF NOT EXISTS tx 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                      amount INTEGER, desc TEXT, type TEXT)''')
-    return conn
+# تابع داخلی برای تبدیل کلمات فارسی به عدد (جایگزین کتابخانه خارجی)
+def persian_to_int(text):
+    words = {
+        'یک': 1, 'دو': 2, 'سه': 3, 'چهار': 4, 'پنج': 5, 'شش': 6, 'هفت': 7, 'هشت': 8, 'نه': 9, 'ده': 10,
+        'بیست': 20, 'سی': 30, 'چهل': 40, 'پنجاه': 50, 'شصت': 60, 'هفتاد': 70, 'هشتاد': 80, 'نود': 90,
+        'صد': 100, 'دویست': 200, 'سیصد': 300, 'چهارصد': 400, 'پانصد': 500, 'ششصد': 600, 'هفتصد': 700, 'هشتصد': 800, 'نهصد': 900,
+        'هزار': 1000, 'میلیون': 1000000
+    }
+    # ابتدا اعداد دیجیتالی را چک کن
+    nums = re.findall(r'\d+', text.replace(',', ''))
+    if nums: return int(nums[0])
+    
+    # اگر عدد دیجیتالی نبود، کلمات را چک کن
+    total = 0
+    current = 0
+    for word in text.split():
+        if word in words:
+            val = words[word]
+            if val >= 1000:
+                if current == 0: current = 1
+                total += current * val
+                current = 0
+            else:
+                current += val
+    return total + current if (total + current) > 0 else None
 
-def extract_amount(text):
-    # اول: تلاش برای پیدا کردن اعداد دیجیتالی (مثل 10000)
-    temp_text = text.replace("میلیون", "000000").replace("هزار", "000")
-    nums = re.findall(r'\d+', temp_text.replace(',', ''))
-    if nums:
-        return int(nums[0])
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = [["📊 گزارش کلی", "📥 دریافت فایل اکسل"]]
+    await update.message.reply_text("سلام! مبلغ را بگویید یا بنویسید.", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True))
+
+async def process_data(user_id, text):
+    amount = persian_to_int(text)
+    if not amount: return "❌ مبلغی پیدا نشد."
     
-    # دوم: تلاش برای تبدیل متن حروفی به عدد (مثل بیست هزار)
-    try:
-        # حذف کلمات غیر مرتبط برای کمک به کتابخانه مبدل
-        clean_text = re.sub(r'[^\u0621-\u064A\u067E\u0686\u0698\u06AF\s]', '', text)
-        for word in ["تومان", "تومن", "ریال", "هزینه", "درآمد", "واریز"]:
-            clean_text = clean_text.replace(word, "")
-        
-        converted = persian_w2n.word_to_num(clean_text.strip())
-        if converted > 0:
-            return converted
-    except:
-        pass
-    
-    return None
+    is_income = any(w in text for w in ["حقوق", "درآمد", "واریز", "فروش"])
+    tx_type = "درآمد ➕" if is_income else "هزینه ➖"
+    val = amount if is_income else -amount
+
+    conn = sqlite3.connect(f"user_{user_id}.db")
+    conn.execute("CREATE TABLE IF NOT EXISTS tx (id INTEGER PRIMARY KEY AUTOINCREMENT, amount INTEGER, desc TEXT, type TEXT)")
+    conn.execute("INSERT INTO tx (amount, desc, type) VALUES (?, ?, ?)", (val, text, tx_type))
+    conn.commit()
+    conn.close()
+    return f"✅ ثبت شد: {amount:,} تومان ({tx_type})"
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    res = await process_data(update.effective_user.id, update.message.text)
+    await update.message.reply_text(res)
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    m = await update.message.reply_text("⏳ در حال پردازش صدا...")
+    f = await context.bot.get_file(update.message.voice.file_id)
+    await f.download_to_drive("v.ogg")
+    res = model.transcribe("v.ogg", language="fa")
+    answer = await process_data(update.effective_user.id, res["text"])
+    await m.edit_text(answer)
+    if os.path.exists("v.ogg"): os.remove("v.ogg")
+
+def main():
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    app.run_polling()
+
+if __name__ == '__main__': main()    return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = [["📊 گزارش کلی", "📥 دریافت فایل اکسل"]]
