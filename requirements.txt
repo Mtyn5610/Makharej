@@ -3,5 +3,4 @@ pandas
 openpyxl
 numpy==1.26.4
 openai-whisper
-word2number-fa
 setuptools
