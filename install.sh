@@ -1,70 +1,54 @@
 #!/bin/bash
 
 clear
-echo -e "\e[32m"
-echo "###############################################"
-echo "#        JibiNo - Intelligent Accountant      #"
-echo "#            نصب‌کننده خودکار جیبی‌نو            #"
-echo "###############################################"
-echo -e "\e[0m"
+echo "==============================================="
+echo "   نصب‌کننده خودکار جیبی‌نو (نسخه اصلاح شده)   "
+echo "==============================================="
 
-read -p "لطفاً توکن ربات تلگرام را وارد کنید: " bot_token
+# ۱. دریافت توکن (مطمئن می‌شویم که متغیر خالی نباشد)
+while [ -z "$bot_token" ]; do
+    read -p "لطفاً توکن ربات تلگرام را وارد کنید: " bot_token
+done
 
-# ۱. نصب پیش‌نیازها
-echo "📦 در حال نصب پکیج‌های مورد نیاز..."
+# ۲. ایجاد پوشه پروژه
+mkdir -p ~/Makharej && cd ~/Makharej
+
+# ۳. نصب پیش‌نیازها
+echo "⏳ در حال نصب پکیج‌های سیستم..."
 sudo apt update && sudo apt install -y python3-pip python3-venv ffmpeg screen zip >> /dev/null
 
-# ۲. ایجاد محیط کاربری
-mkdir -p ~/Makharej && cd ~/Makharej
+# ۴. ساخت محیط مجازی و نصب کتابخانه‌ها
+echo "⏳ در حال آماده‌سازی پایتون..."
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip >> /dev/null
+# نصب مستقیم برای اطمینان از عدم وابستگی به فایل خارجی در لحظه نصب
 ./venv/bin/pip install python-telegram-bot pandas openpyxl SpeechRecognition pydub >> /dev/null
 
-# ۳. تنظیم توکن
-sed -i "s/ENTER_TOKEN_HERE/$bot_token/" bot.py
-
-# ۴. ساخت دستور JibiNo در سیستم
-if ! grep -q "alias JibiNo=" ~/.bashrc; then
-    echo "alias JibiNo='~/Makharej/manager.sh'" >> ~/.bashrc
+# ۵. تزریق توکن به فایل bot.py
+# این دستور مستقیماً کلمه ENTER_TOKEN_HERE را با توکن واقعی جایگزین می‌کند
+if [ -f "bot.py" ]; then
+    sed -i "s/ENTER_TOKEN_HERE/$bot_token/" bot.py
+    echo "✅ توکن با موفقیت در کد ثبت شد."
+else
+    echo "❌ خطا: فایل bot.py پیدا نشد! مطمئن شوید فایل کنار install.sh است."
+    exit 1
 fi
 
-# ۵. ساخت فایل مدیریت
-cat << 'EOF' > ~/Makharej/manager.sh
-#!/bin/bash
-while true; do
-    clear
-    echo -e "\e[32m"
-    echo "      ██╗██╗██████╗ ██╗███╗   ██╗ ██████╗ "
-    echo "      ██║██║██╔══██╗██║████╗  ██║██╔═══██╗"
-    echo "      ██║██║██████╔╝██║██╔██╗ ██║██║   ██║"
-    echo " ██   ██║██║██╔══██╗██║██║╚██╗██║██║   ██║"
-    echo " ╚█████╔╝██║██████╔╝██║██║ ╚████║╚██████╔╝"
-    echo "  ╚════╝ ╚═╝╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝ "
-    echo -e "\e[0m"
-    echo "======================================="
-    echo "       🌟 منوی مدیریت جـیـبی‌نـو 🌟       "
-    echo "======================================="
-    echo "1) 🚀 روشن کردن (Start)"
-    echo "2) 🛑 خاموش کردن (Stop)"
-    echo "3) 🔄 ری‌استارت (Restart)"
-    echo "4) 📊 لاگ‌های زنده (Logs)"
-    echo "5) 💾 بکاپ دیتابیس (Backup)"
-    echo "6) ❌ خروج"
-    echo "---------------------------------------"
-    read -p "انتخاب کنید: " opt
-    case $opt in
-        1) screen -dmS jibi_bot ~/Makharej/venv/bin/python3 ~/Makharej/bot.py && echo "✅ روشن شد." ;;
-        2) screen -XS jibi_bot quit && echo "🛑 خاموش شد." ;;
-        3) screen -XS jibi_bot quit && screen -dmS jibi_bot ~/Makharej/venv/bin/python3 ~/Makharej/bot.py && echo "🔄 ری‌استارت شد." ;;
-        4) screen -r jibi_bot ;;
-        5) zip -r backup_$(date +%Y%m%d).zip ~/Makharej/user_*.db && echo "✅ بکاپ گرفته شد." ;;
-        6) exit 0 ;;
-    esac
-    read -p "برگشت با اینتر..."
-done
-EOF
-chmod +x ~/Makharej/manager.sh
+# ۶. ثبت دستور JibiNo در سیستم
+if ! grep -q "alias JibiNo=" ~/.bashrc; then
+    echo "alias JibiNo='~/Makharej/manager.sh'" >> ~/.bashrc
+    source ~/.bashrc 2>/dev/null
+fi
 
-echo -e "\e[32m✅ نصب کامل شد! برای مدیریت بنویسید: JibiNo\e[0m"
-source ~/.bashrc 2>/dev/null
-~/Makharej/manager.sh
+# ۷. اتمام نصب
+clear
+echo -e "\e[32m✅ نصب با موفقیت تمام شد!\e[0m"
+echo "------------------------------------------------"
+echo "برای ورود به منوی مدیریت، دستور زیر را تایپ کنید:"
+echo -e "\e[33mJibiNo\e[0m"
+echo "(اگر دستور کار نکرد، یکبار ترمینال را ببندید و باز کنید)"
+echo "------------------------------------------------"
+
+# اجرای منو برای اولین بار بدون لوپ
+chmod +x manager.sh
+./manager.sh
