@@ -1,201 +1,74 @@
-import os, sqlite3, pandas as pd, re, whisper
+import os, sqlite3, re, pandas as pd, speech_recognition as sr
+from pydub import AudioSegment
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
+# --- پیکربندی ---
 TOKEN = "ENTER_TOKEN_HERE"
-model = whisper.load_model("tiny")
 
-# تابع داخلی برای تبدیل کلمات فارسی به عدد (جایگزین کتابخانه خارجی)
-def persian_to_int(text):
-    words = {
-        'یک': 1, 'دو': 2, 'سه': 3, 'چهار': 4, 'پنج': 5, 'شش': 6, 'هفت': 7, 'هشت': 8, 'نه': 9, 'ده': 10,
-        'بیست': 20, 'سی': 30, 'چهل': 40, 'پنجاه': 50, 'شصت': 60, 'هفتاد': 70, 'هشتاد': 80, 'نود': 90,
-        'صد': 100, 'دویست': 200, 'سیصد': 300, 'چهارصد': 400, 'پانصد': 500, 'ششصد': 600, 'هفتصد': 700, 'هشتصد': 800, 'نهصد': 900,
-        'هزار': 1000, 'میلیون': 1000000
-    }
-    # ابتدا اعداد دیجیتالی را چک کن
-    nums = re.findall(r'\d+', text.replace(',', ''))
-    if nums: return int(nums[0])
-    
-    # اگر عدد دیجیتالی نبود، کلمات را چک کن
-    total = 0
-    current = 0
-    for word in text.split():
-        if word in words:
-            val = words[word]
-            if val >= 1000:
-                if current == 0: current = 1
-                total += current * val
-                current = 0
-            else:
-                current += val
-    return total + current if (total + current) > 0 else None
+# لیست کلمات برای تشخیص هوشمند درآمد
+INCOME_KEYWORDS = ["حقوق", "درآمد", "واریز", "فروش", "سود", "هدیه", "طلب", "برگشتی", "پاداش"]
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [["📊 گزارش کلی", "📥 دریافت فایل اکسل"]]
-    await update.message.reply_text("سلام! مبلغ را بگویید یا بنویسید.", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True))
+# دسته‌بندی خودکار
+CATEGORIES = {
+    "🍎 تغذیه": ["غذا", "رستوران", "سوپرمارکت", "نون", "میوه", "ناهار", "شام", "کافه", "سیگار", "شیرینی"],
+    "🚗 حمل و نقل": ["بنزین", "اسنپ", "تپسی", "ماشین", "تعمیرگاه", "کارواش", "مترو", "اتوبوس"],
+    "🏠 خانه": ["اجاره", "شارژ", "قبض", "آب", "برق", "گاز", "اینترنت", "تعمیرات"],
+    "💊 سلامت": ["دکتر", "دارو", "ویزیت", "داروخانه", "بیمارستان"],
+    "💳 مالی": ["قسط", "وام", "کارت به کارت", "قرض", "بدهی"]
+}
 
-async def process_data(user_id, text):
-    amount = persian_to_int(text)
-    if not amount: return "❌ مبلغی پیدا نشد."
-    
-    is_income = any(w in text for w in ["حقوق", "درآمد", "واریز", "فروش"])
-    tx_type = "درآمد ➕" if is_income else "هزینه ➖"
-    val = amount if is_income else -amount
-
+def get_db(user_id):
     conn = sqlite3.connect(f"user_{user_id}.db")
-    conn.execute("CREATE TABLE IF NOT EXISTS tx (id INTEGER PRIMARY KEY AUTOINCREMENT, amount INTEGER, desc TEXT, type TEXT)")
-    conn.execute("INSERT INTO tx (amount, desc, type) VALUES (?, ?, ?)", (val, text, tx_type))
-    conn.commit()
-    conn.close()
-    return f"✅ ثبت شد: {amount:,} تومان ({tx_type})"
+    conn.execute('''CREATE TABLE IF NOT EXISTS tx 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  amount INTEGER, desc TEXT, type TEXT, category TEXT, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    return conn
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    res = await process_data(update.effective_user.id, update.message.text)
-    await update.message.reply_text(res)
+def detect_category(text):
+    for cat, words in CATEGORIES.items():
+        if any(w in text for w in words): return cat
+    return "📝 سایر"
 
-async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    m = await update.message.reply_text("⏳ در حال پردازش صدا...")
-    f = await context.bot.get_file(update.message.voice.file_id)
-    await f.download_to_drive("v.ogg")
-    res = model.transcribe("v.ogg", language="fa")
-    answer = await process_data(update.effective_user.id, res["text"])
-    await m.edit_text(answer)
-    if os.path.exists("v.ogg"): os.remove("v.ogg")
-
-def main():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    app.run_polling()
-
-if __name__ == '__main__': main()    return None
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [["📊 گزارش کلی", "📥 دریافت فایل اکسل"]]
-    await update.message.reply_text(
-        "سلام! من حسابدار هوشمند شما هستم.\n\n"
-        "💰 مبلغ را بنویسید یا ویس بفرستید.\n"
-        "مثال: «۵۰ هزار تومان بنزین» یا «۲ میلیون واریز حقوق»", 
-        reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
-    )
+def extract_amount(text):
+    text = text.replace("میلیون", "000000").replace("ملیون", "000000").replace("هزار", "000").replace("تومن", "").replace("تومان", "")
+    nums = re.findall(r'\d+', text.replace(',', ''))
+    return int("".join(nums)) if nums else None
 
 async def process_data(user_id, text):
     amount = extract_amount(text)
-    if not amount:
-        return "❌ مبلغی پیدا نشد! لطفاً مبلغ را به عدد یا حروف واضح (مثلاً بیست هزار) بگویید."
+    if not amount: return f"❓ مبلغی در این متن پیدا نشد:\n«{text}»"
     
-    # تشخیص نوع تراکنش
-    is_income = any(w in text for w in ["حقوق", "درآمد", "واریز", "فروش", "هدیه"])
+    is_income = any(w in text for w in INCOME_KEYWORDS)
     tx_type = "درآمد ➕" if is_income else "هزینه ➖"
-    val = amount if is_income else -amount
+    category = detect_category(text)
+    final_amount = amount if is_income else -amount
 
     conn = get_db(user_id)
-    conn.execute("INSERT INTO tx (amount, desc, type) VALUES (?, ?, ?)", (val, text, tx_type))
+    conn.execute("INSERT INTO tx (amount, desc, type, category) VALUES (?, ?, ?, ?)", 
+                 (final_amount, text, tx_type, category))
     conn.commit()
     conn.close()
     
-    return f"✅ ثبت شد:\n💰 مبلغ: {amount:,} تومان\n🗂 نوع: {tx_type}\n📝 متن: {text}"
+    return f"✅ {tx_type} ثبت شد:\n💰 مبلغ: {amount:,} تومان\n🗂 دسته: {category}\n📝 بابت: {text}"
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    response = await process_data(update.effective_user.id, update.message.text)
-    await update.message.reply_text(response)
-
-async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sent_msg = await update.message.reply_text("🎧 در حال شنیدن صدای شما...")
-    try:
-        file = await context.bot.get_file(update.message.voice.file_id)
-        path = f"voice_{update.effective_user.id}.ogg"
-        await file.download_to_drive(path)
-        
-        # تبدیل صوت به متن
-        result = model.transcribe(path, language="fa")
-        text = result["text"]
-        
-        response = await process_data(update.effective_user.id, text)
-        await sent_msg.edit_text(response)
-        
-        if os.path.exists(path): os.remove(path)
-    except Exception as e:
-        await sent_msg.edit_text(f"❌ خطای فنی در پردازش صدا: {str(e)}")
-
-async def send_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    conn = get_db(user_id)
-    df = pd.read_sql_query("SELECT amount FROM tx", conn)
-    conn.close()
-    
-    total = df['amount'].sum() if not df.empty else 0
-    await update.message.reply_text(f"📊 گزارش موجودی:\n💰 مانده نهایی: {total:,} تومان")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = [["📊 موجودی فعلی", "📥 خروجی اکسل"]]
+    await update.message.reply_text(
+        "🌟 به جیبی‌نو خوش آمدید!\nمن مخارج و درآمدهای شما را مدیریت می‌کنم.\nکافیست مبلغ را بنویسید یا ویس بفرستید.",
+        reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True)
+    )
 
 async def export_excel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    conn = get_db(user_id)
-    df = pd.read_sql_query("SELECT * FROM tx", conn)
+    uid = update.effective_user.id
+    conn = get_db(uid)
+    df = pd.read_sql_query("SELECT date as 'تاریخ', type as 'نوع', amount as 'مبلغ', category as 'دسته', desc as 'توضیح' FROM tx", conn)
     conn.close()
+    if df.empty: return await update.message.reply_text("❌ هنوز تراکنشی ثبت نکرده‌اید.")
     
-    if df.empty:
-        await update.message.reply_text("داده‌ای برای خروجی وجود ندارد.")
-        return
-        
-    path = f"report_{user_id}.xlsx"
-    df.to_excel(path, index=False)
-    await update.message.reply_document(open(path, 'rb'), caption="📊 لیست کامل تراکنش‌های شما")
-    if os.path.exists(path): os.remove(path)
+    file_path = f"report_{uid}.xlsx"
+    df.to_excel(file_path, index=False)
+    await update.message.reply_document(open(file_path, 'rb'), caption="📊 گزارش مالی کامل شما")
+    os.remove(file_path)
 
-def main():
-    print("🚀 ربات با موفقیت در حال اجرا است...")
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.Text("📊 گزارش کلی"), send_report))
-    app.add_handler(MessageHandler(filters.Text("📥 دریافت فایل اکسل"), export_excel))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    app.run_polling()
-
-if __name__ == '__main__':
-    main()    conn.commit()
-    conn.close()
-    return f"✅ ثبت شد: {amount:,} تومان ({tx_type})\n📝 متن تشخیص داده شده: {text}"
-
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    response = await process_data(update.effective_user.id, update.message.text)
-    await update.message.reply_text(response)
-
-async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sent_msg = await update.message.reply_text("🎧 در حال گوش دادن به صدای شما...")
-    try:
-        file = await context.bot.get_file(update.message.voice.file_id)
-        await file.download_to_drive("voice.ogg")
-        
-        # تشخیص گفتار با مدل Whisper
-        result = model.transcribe("voice.ogg", language="fa")
-        text = result["text"]
-        
-        response = await process_data(update.effective_user.id, text)
-        await sent_msg.edit_text(response)
-    except Exception as e:
-        await sent_msg.edit_text(f"❌ خطا در پردازش صدا: {str(e)}")
-    finally:
-        if os.path.exists("voice.ogg"): os.remove("voice.ogg")
-
-async def send_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    conn = get_db(user_id)
-    df = pd.read_sql_query("SELECT amount FROM tx", conn)
-    total = df['amount'].sum() if not df.empty else 0
-    await update.message.reply_text(f"💰 موجودی کل شما: {total:,} تومان")
-    conn.close()
-
-def main():
-    print("🤖 ربات با موفقیت فعال شد...")
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.Text("📊 گزارش کلی"), send_report))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    app.run_polling()
-
-if __name__ == '__main__':
-    main()
+async def get_balance(update
