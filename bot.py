@@ -4,6 +4,7 @@ import sqlite3
 import re
 import pandas as pd
 import speech_recognition as sr
+import jdatetime
 from pydub import AudioSegment
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -11,13 +12,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # --- تنظیمات اصلی ---
 TOKEN = "ENTER_TOKEN_HERE"
 
-# کلمات کلیدی درآمد (گسترش یافته برای تشخیص دقیق‌تر)
 INCOME_KEYWORDS = [
     "حقوق", "درآمد", "واریز", "فروش", "فروختم", "سود", "هدیه", "طلب", "برگشتی", 
     "پاداش", "یارانه", "دریافت", "گرفتم", "اومد", "نشست", "کاسبی", "دستمزد"
 ]
 
-# دسته‌بندی هوشمند (گسترش یافته)
 CATEGORIES = {
     "🍎 تغذیه": ["غذا", "رستوران", "سوپرمارکت", "نون", "میوه", "ناهار", "شام", "کافه", "سیگار", "شیرینی", "گوشت", "مرغ", "هایپر", "لبنیات"],
     "💰 سرمایه‌گذاری": ["طلا", "دلار", "ارز", "سکه", "بورس", "سهام", "کریپتو", "تتر", "بیت کوین"],
@@ -39,80 +38,79 @@ def get_db(user_id):
                   amount INTEGER, desc TEXT, type TEXT, category TEXT, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     return conn
 
+# --- استخراج هوشمند مبلغ ---
 def extract_amount(text):
-    text = text.replace("میلیون", "000000").replace("ملیون", "000000").replace("هزار", "000").replace("تومن", "").replace("تومان", "")
-    nums = re.findall(r'\d+', text.replace(',', ''))
-    return int("".join(nums)) if nums else None
+    word_to_num = {"یک": "1", "دو": "2", "سه": "3", "چهار": "4", "پنج": "5", "شش": "6", "هفت": "7", "هشت": "8", "نه": "9", "ده": "10"}
+    processed_text = text
+    for word, num in word_to_num.items():
+        processed_text = processed_text.replace(word, num)
+    is_million = "میلیون" in processed_text or "ملیون" in processed_text
+    processed_text = processed_text.replace("میلیون", "000000").replace("ملیون", "000000")
+    num_str = "".join(re.findall(r'\d+', processed_text.replace(',', '')))
+    if not num_str: return None
+    amount = int(num_str)
+    if amount < 5000 and not is_million: amount = amount * 1000
+    return amount
 
 def detect_category(text):
     for cat, words in CATEGORIES.items():
-        if any(w in text for w in words):
-            return cat
+        if any(w in text for w in words): return cat
     return "📝 سایر"
 
 async def process_data(user_id, text):
     amount = extract_amount(text)
-    if not amount:
-        return f"❓ مبلغی در این متن پیدا نشد:\n«{text}»"
-    
-    # تشخیص هوشمند نوع تراکنش
+    if not amount: return f"❓ مبلغی پیدا نشد در:\n«{text}»"
     is_income = any(w in text for w in INCOME_KEYWORDS)
     tx_type = "درآمد ➕" if is_income else "هزینه ➖"
     category = detect_category(text)
     final_amount = amount if is_income else -amount
-
     conn = get_db(user_id)
-    conn.execute("INSERT INTO tx (amount, desc, type, category) VALUES (?, ?, ?, ?)", 
-                 (final_amount, text, tx_type, category))
+    conn.execute("INSERT INTO tx (amount, desc, type, category) VALUES (?, ?, ?, ?)", (final_amount, text, tx_type, category))
     conn.commit()
     conn.close()
-    
-    return f"✅ {tx_type} ثبت شد:\n💰 مبلغ: {amount:,} تومان\n🗂 دسته: {category}\n📝 بابت: {text}"
+    return f"✅ {tx_type} ثبت شد:\n💰 مبلغ: {amount:,} تومان\n🗂 دسته: {category}"
 
-# --- دستورات ربات ---
-
+# --- دستورات تلگرام ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [
-        ["📊 موجودی و گزارش", "📥 خروجی اکسل"],
-        ["🗑 حذف آخرین ثبت", "⚠️ پاکسازی کل"]
-    ]
-    await update.message.reply_text(
-        "🌟 به **جیبی‌نو** خوش آمدید!\n\nمن با کلمات جدید آپدیت شدم! کافیه مخارج یا درآمدت رو بگی.\nمثلاً: «گوشیم رو ۵ میلیون فروختم» یا «۲۰ تومن پول شارژر دادم»",
-        reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True),
-        parse_mode="Markdown"
-    )
+    kb = [["📊 موجودی و گزارش", "📥 خروجی اکسل"], ["🗑 حذف آخرین ثبت", "⚠️ پاکسازی کل"]]
+    await update.message.reply_text("🌟 به **جیبی‌نو** خوش آمدید!", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True), parse_mode="Markdown")
 
 async def get_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     conn = get_db(uid)
     df_all = pd.read_sql_query("SELECT amount FROM tx", conn)
     total = df_all['amount'].sum() if not df_all.empty else 0
-    
     df_cat = pd.read_sql_query("SELECT category, SUM(amount) as cat_sum FROM tx WHERE amount < 0 GROUP BY category", conn)
     conn.close()
-
-    report = f"💰 **گزارش وضعیت مالی شما**\n---------------------------------------\n"
-    report += f"💵 **مانده کل:** {total:,} تومان\n\n"
-    
-    if not df_cat.empty:
-        report += "🔻 **بیشترین هزینه‌ها به تفکیک:**\n"
-        for _, row in df_cat.iterrows():
-            report += f"{row['category']}: {abs(row['cat_sum']):,} تومان\n"
-    
+    report = f"💰 **گزارش وضعیت مالی**\n------------------\n💵 **مانده:** {total:,} تومان\n\n🔻 **هزینه‌ها:**\n"
+    for _, row in df_cat.iterrows(): report += f"{row['category']}: {abs(row['cat_sum']):,} تومان\n"
     await update.message.reply_text(report, parse_mode="Markdown")
 
+# --- بخش خروجی اکسل با تاریخ شمسی ---
 async def export_excel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     conn = get_db(uid)
     df = pd.read_sql_query("SELECT date, type, amount, category, desc FROM tx ORDER BY id DESC", conn)
     conn.close()
     
-    if df.empty:
-        return await update.message.reply_text("❌ دیتابیس خالی است.")
+    if df.empty: return await update.message.reply_text("❌ دیتابیس خالی است.")
+
+    # تبدیل تاریخ میلادی به شمسی
+    def to_jalali(iso_date):
+        try:
+            # جدا کردن بخش تاریخ از زمان (مثلاً 2023-10-27 10:30:00)
+            date_part = iso_date.split(' ')[0]
+            y, m, d = map(int, date_part.split('-'))
+            return jdatetime.date.fromgregorian(day=d, month=m, year=y).strftime("%Y/%m/%d")
+        except: return iso_date
+
+    df['تاریخ شمسی'] = df['date'].apply(to_jalali)
+    # مرتب‌سازی ستون‌ها برای نمایش بهتر در اکسل
+    df = df[['تاریخ شمسی', 'type', 'amount', 'category', 'desc']]
     
     path = f"report_{uid}.xlsx"
     df.to_excel(path, index=False)
-    await update.message.reply_document(document=open(path, 'rb'), caption="📊 گزارش کامل اکسل")
+    await update.message.reply_document(document=open(path, 'rb'), caption="📊 گزارش کامل با تاریخ شمسی")
     os.remove(path)
 
 async def delete_last(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -124,23 +122,18 @@ async def delete_last(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if row:
         cursor.execute("DELETE FROM tx WHERE id = ?", (row[0],))
         conn.commit()
-        await update.message.reply_text(f"🗑 تراکنش حذف شد:\n{row[2]} ({abs(row[1]):,} تومان)")
-    else:
-        await update.message.reply_text("تراکنشی یافت نشد.")
+        await update.message.reply_text(f"🗑 تراکنش حذف شد.")
     conn.close()
 
 async def clear_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     conn = get_db(uid)
-    conn.execute("DELETE FROM tx")
-    conn.commit()
-    conn.close()
-    await update.message.reply_text("⚠️ تمام اطلاعات شما پاک شد.")
+    conn.execute("DELETE FROM tx"); conn.commit(); conn.close()
+    await update.message.reply_text("⚠️ اطلاعات پاک شد.")
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     m = await update.message.reply_text("⏳ در حال پردازش صوت...")
-    ogg = f"v_{update.effective_user.id}.ogg"
-    wav = f"v_{update.effective_user.id}.wav"
+    ogg, wav = f"v_{update.effective_user.id}.ogg", f"v_{update.effective_user.id}.wav"
     try:
         f = await context.bot.get_file(update.message.voice.file_id)
         await f.download_to_drive(ogg)
@@ -150,8 +143,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = r.recognize_google(r.record(source), language="fa-IR")
         res = await process_data(update.effective_user.id, text)
         await m.edit_text(res)
-    except Exception:
-        await m.edit_text("❌ متوجه صدا نشدم.")
+    except: await m.edit_text("❌ متوجه نشدم.")
     finally:
         for f in [ogg, wav]: 
             if os.path.exists(f): os.remove(f)
@@ -169,8 +161,7 @@ def main():
     app.add_handler(MessageHandler(filters.Text("⚠️ پاکسازی کل"), clear_all))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    print("JibiNo is online with extended vocabulary...")
+    print("JibiNo is online with Jalali support...")
     app.run_polling()
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__main__': main()
