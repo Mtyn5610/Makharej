@@ -12,7 +12,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 TOKEN = "ENTER_TOKEN_HERE"
 
 # کلمات کلیدی برای تشخیص درآمد
-INCOME_KEYWORDS = ["حقوق", "درآمد", "واریز", "فروش", "سود", "هدیه", "طلب", "برگشتی", "پاداش", "یارانه", "دریافت", "گرفتم", "اومد"]
+INCOME_KEYWORDS = ["فروختم","حقوق", "درآمد", "واریز", "فروش", "سود", "هدیه", "طلب", "برگشتی", "پاداش", "یارانه", "دریافت", "گرفتم", "اومد"]
 
 # دسته‌بندی هوشمند
 CATEGORIES = {
