@@ -1,47 +1,108 @@
 #!/bin/bash
 
-# آدرس مخزن شما
-REPO_URL="https://raw.githubusercontent.com/Mtyn5610/Makharej/main"
+# مسیر پوشه پروژه
+PROJECT_DIR="$HOME/Makharej"
+BOT_FILE="$PROJECT_DIR/bot.py"
 
-clear
-echo "==============================================="
-echo "        JibiNo Installer - جیبی‌نو             "
-echo "==============================================="
+# --- فاز ۱: نصب پیش‌نیازها و تنظیمات اولیه (فقط در اولین اجرا) ---
+if [ ! -d "$PROJECT_DIR/venv" ]; then
+    echo -e "\e[34m------------------------------------------\e[0m"
+    echo -e "\e[1;32m   به نصب‌کننده خودکار جیبی‌نو خوش آمدید   \e[0m"
+    echo -e "\e[34m------------------------------------------\e[0m"
+    
+    # نصب ابزارهای سیستم در صورت نبودن
+    sudo apt update && sudo apt install -y python3-venv python3-pip screen zip
+    
+    # ایجاد محیط مجازی
+    python3 -m venv "$PROJECT_DIR/venv"
+    "$PROJECT_DIR/venv/bin/pip" install python-telegram-bot pandas jdatetime openpyxl requests flask
+    
+    # دریافت اطلاعات حساس
+    read -p "📌 توکن ربات تلگرام را وارد کنید: " BOT_TOKEN
+    read -p "📌 آیدی عددی ادمین اصلی (خودتان) را وارد کنید: " ADMIN_ID
 
-# ۱. دریافت توکن
-read -p "Token: " bot_token
-if [ -z "$bot_token" ]; then
-    echo "خطا: توکن وارد نشد."
-    exit 1
+    # تزریق اطلاعات به فایل bot.py
+    sed -i "s/PLACEHOLDER_TOKEN/$BOT_TOKEN/g" "$BOT_FILE"
+    sed -i "s/999999999/$ADMIN_ID/g" "$BOT_FILE"
+    
+    echo -e "\e[32m✅ تنظیمات اولیه با موفقیت انجام شد.\e[0m"
+    sleep 2
 fi
 
-# ۲. ایجاد پوشه و دانلود فایل‌ها
-mkdir -p ~/Makharej && cd ~/Makharej
-curl -sLO "$REPO_URL/bot.py"
-curl -sLO "$REPO_URL/requirements.txt"
-curl -sLO "$REPO_URL/manager.sh"
+# --- فاز ۲: منوی گرافیکی و مدیریتی جیبی‌نو ---
+while true; do
+    clear
+    echo -e "\e[32m"
+    echo "      ██╗██╗██████╗ ██╗███╗   ██╗ ██████╗ "
+    echo "      ██║██║██╔══██╗██║████╗  ██║██╔═══██╗"
+    echo "      ██║██║██████╔╝██║██╔██╗ ██║██║   ██║"
+    echo " ██   ██║██║██╔══██╗██║██║╚██╗██║██║   ██║"
+    echo " ╚█████╔╝██║██████╔╝██║██║ ╚████║╚██████╔╝"
+    echo "  ╚════╝ ╚═╝╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝ "
+    echo -e "\e[0m"
+    echo "======================================="
+    echo "       🌟 منوی مدیریت جـیـبی‌نـو 🌟       "
+    echo "======================================="
+    echo "1) 🚀 روشن کردن (Start)"
+    echo "2) 🛑 خاموش کردن (Stop)"
+    echo "3) 🔄 ری‌استارت (Restart)"
+    echo "4) 📊 لاگ‌های زنده (Logs)"
+    echo "5) 💾 بکاپ دیتابیس (Backup)"
+    echo "6) 🔄 آپدیت سورس (Git Pull)"
+    echo "7) ❌ خروج از منو"
+    echo -e "\e[31m8) 🧨 پاکسازی کامل پروژه (Uninstall)\e[0m"
+    echo "---------------------------------------"
+    read -p "انتخاب کنید: " opt
 
-# ۳. نصب پیش‌نیازها
-sudo apt update -y
-sudo apt install -y python3-pip python3-venv ffmpeg screen zip
-
-# ۴. راه‌اندازی پایتون
-python3 -m venv venv
-./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements.txt
-
-# ۵. تزریق توکن به کد
-sed -i "s/ENTER_TOKEN_HERE/$bot_token/" bot.py
-
-# ۶. تنظیم دسترسی و میانبر
-chmod +x manager.sh
-if ! grep -q "alias JibiNo=" ~/.bashrc; then
-    echo "alias JibiNo='bash ~/Makharej/manager.sh'" >> ~/.bashrc
-fi
-
-echo "✅ نصب با موفقیت تمام شد."
-echo "برای شروع بنویسید: JibiNo"
-sleep 2
-
-# ۷. اجرای منو
-bash ~/Makharej/manager.sh
+    case $opt in
+        1)
+            # بستن سشن‌های قدیمی
+            screen -ls | grep "jibi_bot" | cut -d. -f1 | awk '{print $1}' | xargs -r -n1 screen -XS quit
+            # اجرای ربات در سکرین جدید
+            screen -dmS jibi_bot "$PROJECT_DIR/venv/bin/python3" "$BOT_FILE"
+            echo -e "\e[32m✅ ربات با موفقیت روشن شد.\e[0m"
+            ;;
+        2)
+            screen -ls | grep "jibi_bot" | cut -d. -f1 | awk '{print $1}' | xargs -r -n1 screen -XS quit
+            echo -e "\e[31m🛑 ربات متوقف شد.\e[0m"
+            ;;
+        3)
+            screen -ls | grep "jibi_bot" | cut -d. -f1 | awk '{print $1}' | xargs -r -n1 screen -XS quit
+            sleep 1
+            screen -dmS jibi_bot "$PROJECT_DIR/venv/bin/python3" "$BOT_FILE"
+            echo -e "\e[36m🔄 ری‌استارت انجام شد.\e[0m"
+            ;;
+        4)
+            if screen -list | grep -q "jibi_bot"; then
+                screen -r jibi_bot
+            else
+                echo -e "\e[31m❌ هیچ رباتی در حال اجرا نیست.\e[0m"
+            fi
+            ;;
+        5)
+            zip -r "$PROJECT_DIR/backup_$(date +%Y%m%d).zip" "$PROJECT_DIR"/*.db
+            echo -e "\e[32m✅ بکاپ از تمام دیتابیس‌ها در پوشه پروژه ساخته شد.\e[0m"
+            ;;
+        6)
+            echo "🔄 در حال دریافت آپدیت از گیت‌هاب..."
+            cd "$PROJECT_DIR" && git pull origin main
+            echo "✅ آپدیت شد. لطفاً یک بار ربات را ری‌استارت (گزینه ۳) کنید."
+            ;;
+        7)
+            exit 0
+            ;;
+        8)
+            read -p "⚠️ آیا مطمئن هستید که می‌خواهید کل پروژه و دیتابیس‌ها را پاک کنید؟ (y/n): " confirm
+            if [ "$confirm" == "y" ]; then
+                screen -ls | grep "jibi_bot" | cut -d. -f1 | awk '{print $1}' | xargs -r -n1 screen -XS quit
+                rm -rf "$PROJECT_DIR"
+                echo -e "\e[31m🔥 کل پروژه حذف شد.\e[0m"
+                exit 0
+            fi
+            ;;
+        *)
+            echo "گزینه نامعتبر."
+            ;;
+    esac
+    read -p "برای بازگشت اینتر بزنید..."
+done
