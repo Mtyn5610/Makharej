@@ -1,6 +1,6 @@
-python-telegram-bot
+python-telegram-bot==20.x
 pandas
-openpyxl
-SpeechRecognition
-pydub
 jdatetime
+openpyxl
+requests
+flask
