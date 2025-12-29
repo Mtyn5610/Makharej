@@ -1,39 +1,38 @@
 import sqlite3
 
-def init_db():
-    conn = sqlite3.connect('finance_bot.db')
-    cursor = conn.cursor()
+class DatabaseManager:
+    def __init__(self, db_path='jibino.db'):
+        self.conn = sqlite3.connect(db_path)
+        self.create_tables()
 
-    # جدول کاربران
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        daily_count INTEGER DEFAULT 0,
-        last_reset TEXT,
-        is_vip BOOLEAN DEFAULT FALSE,
-        vip_expire_date TEXT
-    )''')
+    def create_tables(self):
+        """ساخت جداول مورد نیاز برای ذخیره تراکنش‌ها"""
+        query = '''
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            asset_type TEXT,
+            amount REAL,
+            date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        '''
+        self.conn.execute(query)
+        self.conn.commit()
 
-    # جدول تراکنش‌ها (هزینه و درآمد)
-    cursor.execute('''CREATE TABLE IF NOT EXISTS transactions (
-        id INTEGER PRIMARY KEY AUTO_INCREMENT,
-        user_id INTEGER,
-        amount INTEGER,
-        category TEXT,
-        description TEXT,
-        type TEXT,
-        date TEXT
-    )''')
+    def add_transaction(self, user_id, asset_type, amount):
+        """ثبت خرید یا موجودی جدید"""
+        query = 'INSERT INTO transactions (user_id, asset_type, amount) VALUES (?, ?, ?)'
+        self.conn.execute(query, (user_id, asset_type, amount))
+        self.conn.commit()
 
-    # جدول دارایی‌ها (طلا و ارز)
-    cursor.execute('''CREATE TABLE IF NOT EXISTS assets (
-        id INTEGER PRIMARY KEY AUTO_INCREMENT,
-        user_id INTEGER,
-        asset_name TEXT,
-        amount REAL,
-        buy_price INTEGER,
-        current_price INTEGER,
-        date TEXT
-    )''')
-
-    conn.commit()
-    conn.close()
+    def get_balance(self, user_id):
+        """محاسبه مجموع دارایی‌ها به تفکیک نوع"""
+        categories = ['gold', 'asset'] # طلا و سایر دارایی‌ها (ارز/سکه)
+        balances = {}
+        
+        for cat in categories:
+            query = 'SELECT SUM(amount) FROM transactions WHERE user_id = ? AND asset_type = ?'
+            result = self.conn.execute(query, (user_id, cat)).fetchone()
+            balances[cat] = result[0] if result[0] else 0
+            
+        return balances
