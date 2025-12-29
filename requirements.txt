@@ -1,6 +1,2 @@
-python-telegram-bot==20.x
-pandas
-jdatetime
-openpyxl
-requests
-flask
+python-telegram-bot
+python-dotenv
