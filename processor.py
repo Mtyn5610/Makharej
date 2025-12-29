@@ -30,10 +30,10 @@ class TextProcessor:
         self.SOOT_TO_GRAM = 0.001
 
     def extract_data(self, text):
-        """استخراج مقدار، واحد و نوع دارایی از متن"""
+        """استخراج مقدار، واحد و نوع دارایی از متن کاربر"""
         value = None
         
-        # ۱. استخراج عدد (حروفی یا رقمی)
+        # پیدا کردن مقدار عددی (حروفی یا رقمی)
         for word, num in self.words_to_num.items():
             if word in text:
                 value = num
@@ -47,11 +47,11 @@ class TextProcessor:
         if value is None:
             return None, None
 
-        # ۲. تشخیص نوع دارایی و اعمال تبدیل واحدها
+        # تشخیص نوع دارایی و تبدیل واحدها
         asset_type = "unknown"
         final_value = value
 
-        # بررسی کلمات مربوط به طلا و تبدیل آن‌ها به گرم
+        # بررسی طلا و تبدیل مثقال/سوت به گرم
         if any(word in text for word in self.keywords["gold"] + ["سوت"]):
             asset_type = "gold"
             if "مثقال" in text:
@@ -59,7 +59,7 @@ class TextProcessor:
             elif "سوت" in text:
                 final_value = value * self.SOOT_TO_GRAM
         
-        # بررسی کلمات مربوط به ارز و سکه (ذخیره به صورت تعداد)
+        # بررسی ارز و سکه (ذخیره به صورت تعداد)
         elif any(word in text for word in self.keywords["currency"] + self.keywords["coin"] + ["عدد"]):
             asset_type = "asset"
 
