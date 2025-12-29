@@ -1,108 +1,27 @@
-#!/usr/bin/env python3
-import os, sqlite3, re, pandas as pd, jdatetime
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+import os
 
-# --- تنظیمات سیستمی (توسط install.sh پر می‌شود) ---
-TOKEN = "PLACEHOLDER_TOKEN"
-ADMIN_ID = 999999999
-
-# --- ۱. مدیریت دیتابیس‌ها ---
-def init_dbs():
-    conn = sqlite3.connect("main.db")
-    # جدول کاربران و اشتراک
-    conn.execute('''CREATE TABLE IF NOT EXISTS users 
-                 (uid INTEGER PRIMARY KEY, status INTEGER DEFAULT 0, daily_count INTEGER DEFAULT 0, 
-                  last_date DATE, total_paid INTEGER DEFAULT 0)''')
-    # جدول پس‌انداز غیرنقدی
-    conn.execute('''CREATE TABLE IF NOT EXISTS savings 
-                 (id INTEGER PRIMARY KEY, uid INTEGER, asset_name TEXT, amount REAL, unit TEXT)''')
-    conn.commit()
-    conn.close()
-
-def get_user_db(uid):
-    conn = sqlite3.connect(f"user_{uid}.db")
-    conn.execute('''CREATE TABLE IF NOT EXISTS tx 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, amount INTEGER, desc TEXT, 
-                  type TEXT, category TEXT, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    return conn
-
-# --- ۲. منطق هوشمند استخراج مبلغ و تشخیص درآمد/هزینه ---
-def extract_amount(text):
-    word_to_num = {"یک": "1", "دو": "2", "سه": "3", "چهار": "4", "پنج": "5", "شش": "6", "هفت": "7", "هشت": "8", "نه": "9", "ده": "10"}
-    processed = text
-    for word, num in word_to_num.items():
-        processed = processed.replace(word, num)
-
-    processed = processed.replace("میلیون", "000000").replace("ملیون", "000000").replace("هزار", "000")
-    nums = "".join(re.findall(r'\d+', processed.replace(',', '')))
-    if not nums: return None
-    amount = int(nums)
+def setup():
+    print("🌟 به نصب‌کننده خودکار جی‌بینو خوش آمدید 🌟")
     
-    # اصلاح هوشمند واحدها (درخواست شما)
-    if amount < 1000 and "هزار" not in text and "000" not in text:
-        amount *= 1000000 # 2 -> 2,000,000
-    elif 1000 <= amount < 10000 and "هزار" not in text:
-        amount *= 1000    # 4650 -> 4,650,000
+    # دریافت اطلاعات از کاربر
+    token = input("لطفاً توکن ربات تلگرام خود را وارد کنید: ")
+    admin_id = input("لطفاً آیدی عددی ادمین را وارد کنید: ")
     
-    return amount
-
-# --- ۳. دیکشنری‌های گسترده دسته‌بندی ---
-INCOME_KEYWORDS = ["حقوق", "درآمد", "واریز", "فروختم", "سود", "هدیه", "طلب", "کاسبی", "یارانه"]
-CATEGORIES = {
-    "🍎 تغذیه و سوپر": ["غذا", "رستوران", "سوپرمارکت", "نون", "نان", "میوه", "ناهار", "شام", "کافه", "هایپر", "لبنیات"],
-    "🚗 حمل و نقل": ["بنزین", "اسنپ", "تپسی", "ماشین", "تعمیر", "کارواش", "مترو", "تاکسی", "لاستیک"],
-    "🏠 مسکن و قبوض": ["اجاره", "شارژ", "قبض", "آب", "برق", "گاز", "اینترنت", "تلفن", "بسته", "وای فای"],
-    "💊 سلامت و درمان": ["دکتر", "دارو", "ویزیت", "داروخانه", "بیمارستان", "دندانپزشکی", "عینک"],
-    "👕 پوشاک و زیبایی": ["لباس", "کفش", "شلوار", "آرایشگاه", "سلمانی", "ادکلن", "عطر", "پوست"],
-    "🎮 تفریح و آموزش": ["سینما", "بازی", "سفر", "هتل", "کادو", "کتاب", "کلاس", "شهریه", "دوره"],
-    "📱 تکنولوژی": ["موبایل", "گوشی", "شارژر", "لپ‌تاپ", "هدفون", "نرم‌افزار"],
-    "💎 پس‌انداز": ["طلا", "دلار", "ارز", "سکه", "تتر", "بیت کوین", "نقره"]
-}
-
-# --- ۴. توابع کاربردی و گزارش‌گیری ---
-async def get_report(uid):
-    conn = get_user_db(uid)
-    df = pd.read_sql_query("SELECT amount, category FROM tx", conn)
-    if df.empty: return "اطلاعاتی ثبت نشده است."
+    # ساخت فایل .env
+    with open(".env", "w") as f:
+        f.write(f"BOT_TOKEN={token}\n")
+        f.write(f"ADMIN_ID={admin_id}\n")
     
-    total = df['amount'].sum()
-    expenses = df[df['amount'] < 0].groupby('category')['amount'].sum().abs()
+    print("\n✅ فایل تنظیمات (.env) با موفقیت ساخته شد.")
+    print("📦 در حال نصب کتابخانه‌های مورد نیاز...")
     
-    report = f"💰 **موجودی کل:** {total:,} تومان\n\n🔻 **هزینه‌ها به تفکیک:**\n"
-    for cat, val in expenses.items():
-        report += f"🔸 {cat}: {val:,} تومان\n"
-    return report
-
-# --- ۵. هندلرهای تلگرام ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    init_dbs()
+    # نصب کتابخانه‌ها
+    os.system("pip install -r requirements.txt")
     
-    # ثبت کاربر در دیتابیس مرکزی
-    conn = sqlite3.connect("main.db")
-    conn.execute("INSERT OR IGNORE INTO users (uid, last_date) VALUES (?, ?)", (uid, jdatetime.date.today().isoformat()))
-    conn.commit()
+    print("\n🚀 نصب با موفقیت تمام شد! حالا می‌توانید با دستور 'python main.py' ربات را روشن کنید.")
 
-    kb = [
-        ["📊 گزارش و موجودی", "📥 خروجی اکسل"],
-        ["✨ لیست پس‌انداز", "🔍 جستجو"],
-        ["📞 پشتیبانی", "⚠️ پاکسازی کل"]
-    ]
-    if uid == ADMIN_ID: kb.append(["🛠 پنل مدیریت ادمین"])
-    await update.message.reply_text("🌟 به جیبی‌نو پرو خوش آمدید!\nمثال ثبت: «۵۰ تومن بنزین» یا «۲ تومن حقوق»", 
-                                   reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True))
-
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
-    kb = [
-        [InlineKeyboardButton("📢 پیام همگانی", callback_data="adm_bc"), InlineKeyboardButton("📊 سود و آمار", callback_data="adm_stats")],
-        [InlineKeyboardButton("💎 شارژ/VIP کاربر", callback_data="adm_vip")]
-    ]
-    await update.message.reply_text("🛠 پنل مدیریت ارشد:", reply_markup=InlineKeyboardMarkup(kb))
-
-async def handle_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
+if __name__ == "__main__":
+    setup()    uid = update.effective_user.id
     text = update.message.text
     mode = context.user_data.get('mode')
 
